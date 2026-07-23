@@ -1,0 +1,741 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Seeker — Gerador de posts</title>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Permanent+Marker&family=Archivo:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #0d0d0f;
+    --panel: #17171b;
+    --panel-2: #1f1f24;
+    --line: #2b2b31;
+    --text: #f1efe9;
+    --muted: #9a97a3;
+    --accent: #e8c7ff;
+    --accent-2: #ffd9a0;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:'Archivo', sans-serif;
+    background:var(--bg);
+    color:var(--text);
+    min-height:100vh;
+  }
+  .wrap{
+    display:grid;
+    grid-template-columns: 380px 1fr;
+    min-height:100vh;
+  }
+  @media (max-width: 900px){
+    .wrap{grid-template-columns: 1fr; }
+  }
+  .panel{
+    background:var(--panel);
+    border-right:1px solid var(--line);
+    padding:24px 22px 60px;
+    overflow-y:auto;
+    max-height:100vh;
+  }
+  .brand{
+    font-family:'Anton', sans-serif;
+    letter-spacing:0.5px;
+    font-size:22px;
+    margin:0 0 2px;
+  }
+  .brand span{color:var(--accent);}
+  .sub{color:var(--muted); font-size:13px; margin:0 0 26px;}
+  h3.section{
+    font-size:11px;
+    text-transform:uppercase;
+    letter-spacing:1.4px;
+    color:var(--muted);
+    margin:26px 0 10px;
+    border-top:1px solid var(--line);
+    padding-top:18px;
+  }
+  h3.section:first-of-type{border-top:none; padding-top:0; margin-top:0;}
+  label{display:block; font-size:13px; margin-bottom:6px; color:var(--text);}
+  .row{display:flex; gap:10px; margin-bottom:12px;}
+  .row > div{flex:1;}
+  select, input[type=text]{
+    width:100%;
+    background:var(--panel-2);
+    border:1px solid var(--line);
+    color:var(--text);
+    padding:9px 10px;
+    border-radius:8px;
+    font-size:13px;
+    font-family:inherit;
+  }
+  .upload{
+    border:1.5px dashed var(--line);
+    border-radius:10px;
+    padding:14px;
+    text-align:center;
+    font-size:12.5px;
+    color:var(--muted);
+    cursor:pointer;
+    margin-bottom:12px;
+    position:relative;
+    transition:border-color .15s;
+  }
+  .upload:hover{border-color:var(--accent);}
+  .upload.has-file{border-style:solid; border-color:var(--accent-2); color:var(--text);}
+  .upload input{position:absolute; inset:0; opacity:0; cursor:pointer;}
+  .seg{
+    display:flex;
+    background:var(--panel-2);
+    border:1px solid var(--line);
+    border-radius:9px;
+    overflow:hidden;
+    margin-bottom:12px;
+  }
+  .seg button{
+    flex:1;
+    padding:9px 6px;
+    background:transparent;
+    border:none;
+    color:var(--muted);
+    font-size:12.5px;
+    cursor:pointer;
+    font-family:inherit;
+  }
+  .seg button.active{background:var(--accent); color:#111;}
+  .toggle-row{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding:9px 0;
+    font-size:13px;
+  }
+  .switch{
+    width:38px; height:22px;
+    background:var(--panel-2);
+    border:1px solid var(--line);
+    border-radius:20px;
+    position:relative;
+    cursor:pointer;
+    flex-shrink:0;
+  }
+  .switch.on{background:var(--accent);}
+  .switch::after{
+    content:'';
+    position:absolute;
+    width:16px;height:16px;
+    background:#fff;
+    border-radius:50%;
+    top:2px; left:2px;
+    transition:left .15s;
+  }
+  .switch.on::after{left:18px; background:#111;}
+  input[type=range]{width:100%; accent-color:var(--accent);}
+  .btn{
+    width:100%;
+    padding:12px;
+    border-radius:9px;
+    border:none;
+    font-family:inherit;
+    font-size:13.5px;
+    font-weight:600;
+    cursor:pointer;
+    margin-top:6px;
+  }
+  .btn-primary{background:var(--accent); color:#111;}
+  .btn-ghost{background:var(--panel-2); color:var(--text); border:1px solid var(--line);}
+  .stage{
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:flex-start;
+    padding:40px 20px;
+    gap:16px;
+  }
+  #canvasHolder{
+    max-width:100%;
+    box-shadow:0 20px 60px rgba(0,0,0,.5);
+    border-radius:6px;
+    overflow:hidden;
+    line-height:0;
+  }
+  canvas{max-width:100%; height:auto; display:block;}
+  .hint{color:var(--muted); font-size:12px; max-width:420px; text-align:center;}
+  .small{font-size:11px; color:var(--muted); margin-top:-6px; margin-bottom:12px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="panel">
+    <p class="brand">SEEKER<span>.</span> gerador</p>
+    <p class="sub">Monte o post trocando só a camiseta e o fundo. O resto (estrelas, pontilhado, brilho, marca d'água) é gerado automaticamente e varia a cada clique em "Randomizar".</p>
+
+    <h3 class="section">Formato</h3>
+    <select id="format">
+      <option value="1080x1350">Feed (4:5) — 1080×1350</option>
+      <option value="1080x1080">Quadrado — 1080×1080</option>
+      <option value="1080x1920">Stories / Reels (9:16) — 1080×1920</option>
+      <option value="1000x1500">Pinterest (2:3) — 1000×1500</option>
+    </select>
+
+    <h3 class="section">Camiseta</h3>
+    <div class="upload" id="upShirtBox">
+      <span id="upShirtLabel">Clique ou arraste o PNG da estampa/camiseta</span>
+      <input type="file" id="upShirt" accept="image/png,image/webp,image/jpeg">
+    </div>
+    <div class="small">Fica melhor com fundo transparente (PNG).</div>
+
+    <h3 class="section">Fundo</h3>
+    <div class="upload" id="upBgBox">
+      <span id="upBgLabel">Clique ou arraste uma foto de fundo (opcional)</span>
+      <input type="file" id="upBg" accept="image/png,image/webp,image/jpeg">
+    </div>
+    <button class="btn btn-ghost" id="clearBg" style="margin-bottom:14px;">Remover foto de fundo</button>
+
+    <label>Opacidade da foto de fundo <span id="bgOpacityVal" style="color:var(--muted);"></span></label>
+    <input type="range" id="bgOpacity" min="0" max="100" value="100" style="margin-bottom:14px;">
+
+    <div class="row">
+      <div>
+        <label>Tema</label>
+        <div class="seg" id="themeSeg">
+          <button data-theme="dark" class="active">Escuro</button>
+          <button data-theme="light">Claro</button>
+        </div>
+      </div>
+    </div>
+
+    <h3 class="section">Marca d'água</h3>
+    <input type="text" id="watermark" value="@seeker_clothes">
+
+    <h3 class="section">Produto (loja de origem)</h3>
+    <label>Loja</label>
+    <select id="store">
+      <option value="none">Nenhuma</option>
+      <option value="shein">Shein</option>
+      <option value="shopee">Shopee</option>
+      <option value="aliexpress">AliExpress</option>
+    </select>
+    <label style="margin-top:10px;">ID do produto</label>
+    <input type="text" id="productId" placeholder="ex: 32663N5 ou BCA-MHM-RHE">
+
+    <label style="margin-top:10px;">Logo da loja (opcional, PNG)</label>
+    <div class="upload" id="upLogoBox">
+      <span id="upLogoLabel">Sem logo enviada — usa uma etiqueta com o nome da loja</span>
+      <input type="file" id="upLogo" accept="image/png,image/webp">
+    </div>
+
+    <h3 class="section">Camiseta</h3>
+    <label>Tamanho <span id="shirtSizeVal" style="color:var(--muted);"></span></label>
+    <input type="range" id="shirtSize" min="30" max="95" value="62">
+
+    <h3 class="section">Decorações</h3>
+    <div class="toggle-row"><span>Estrelas</span><div class="switch on" id="tgStars"></div></div>
+    <div class="toggle-row"><span>Bolinhas brilhantes</span><div class="switch on" id="tgSparkles"></div></div>
+    <div class="toggle-row"><span>Pontilhado nos cantos</span><div class="switch on" id="tgDots"></div></div>
+    <div class="toggle-row"><span>Ornamento de espinhos</span><div class="switch on" id="tgThorns"></div></div>
+    <div class="toggle-row"><span>Brilho atrás da camiseta</span><div class="switch on" id="tgGlow"></div></div>
+
+    <label style="margin-top:14px;">Quantidade de elementos <span id="densityVal" style="color:var(--muted);"></span></label>
+    <input type="range" id="density" min="0" max="100" value="50">
+
+    <label style="margin-top:14px;">Intensidade da variação</label>
+    <input type="range" id="variance" min="0" max="100" value="55">
+
+    <button class="btn btn-primary" id="randomizeBtn">🎲 Randomizar decoração</button>
+    <button class="btn btn-primary" id="downloadBtn" style="margin-top:16px;">⬇ Baixar PNG</button>
+
+    <h3 class="section">Postar</h3>
+    <div class="small" style="margin-top:-4px;">Baixa a imagem acima e depois abre o app pra subir manualmente.</div>
+    <a class="btn btn-ghost" href="https://www.instagram.com/" target="_blank" rel="noopener" style="display:block; text-align:center; text-decoration:none; margin-top:10px;">📷 Abrir Instagram</a>
+    <a class="btn btn-ghost" href="https://www.tiktok.com/upload" target="_blank" rel="noopener" style="display:block; text-align:center; text-decoration:none; margin-top:10px;">🎵 Abrir TikTok</a>
+    <a class="btn btn-ghost" href="https://www.pinterest.com/pin-creation-tool/" target="_blank" rel="noopener" style="display:block; text-align:center; text-decoration:none; margin-top:10px;">📌 Abrir Pinterest</a>
+  </div>
+
+  <div class="stage">
+    <div id="canvasHolder">
+      <canvas id="c"></canvas>
+    </div>
+    <p class="hint">Pré-visualização em tempo real. Suba a camiseta e (se quiser) um fundo — troque só isso entre posts. Clique em "Randomizar" para variar posição das estrelas, pontos e espinhos sem mexer no resto.</p>
+  </div>
+
+</div>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+
+let state = {
+  format: '1080x1350',
+  theme: 'dark',
+  shirtImg: null,
+  bgImg: null,
+  watermark: '@seeker_clothes',
+  store: 'none',
+  productId: '',
+  logoImg: null,
+  stars: true,
+  sparkles: true,
+  dots: true,
+  thorns: true,
+  glow: true,
+  variance: 55,
+  seed: 42,
+  shirtSize: 62,
+  density: 50,
+  bgOpacity: 100
+};
+
+// ---------- seeded random ----------
+function mulberry32(a){
+  return function(){
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  }
+}
+let rnd = mulberry32(state.seed);
+
+function loadImageFile(file, cb){
+  const reader = new FileReader();
+  reader.onload = e => {
+    const img = new Image();
+    img.onload = () => cb(img);
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+// converts an image to a true grayscale canvas (more reliable across browsers than ctx.filter)
+function toGrayscale(img){
+  const off = document.createElement('canvas');
+  off.width = img.width;
+  off.height = img.height;
+  const octx = off.getContext('2d');
+  octx.drawImage(img, 0, 0);
+  const data = octx.getImageData(0, 0, off.width, off.height);
+  const px = data.data;
+  for(let i=0;i<px.length;i+=4){
+    const gray = px[i]*0.299 + px[i+1]*0.587 + px[i+2]*0.114;
+    px[i] = px[i+1] = px[i+2] = gray;
+  }
+  octx.putImageData(data, 0, 0);
+  return off;
+}
+
+// ---------- drawing helpers ----------
+function drawStar(ctx, cx, cy, spikes, outerR, innerR, rotation, color, alpha){
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = color;
+  ctx.translate(cx, cy);
+  ctx.rotate(rotation);
+  ctx.beginPath();
+  for(let i=0;i<spikes*2;i++){
+    const r = i % 2 === 0 ? outerR : innerR;
+    const a = (Math.PI / spikes) * i;
+    ctx.lineTo(r * Math.sin(a), -r * Math.cos(a));
+  }
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+
+// small glowing dot / bokeh sparkle
+function drawGlowDot(ctx, cx, cy, radius, color, alpha){
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius);
+  g.addColorStop(0, color);
+  g.addColorStop(0.45, color);
+  g.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.arc(cx, cy, radius, 0, Math.PI*2);
+  ctx.fill();
+  // bright core
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.arc(cx, cy, radius*0.18, 0, Math.PI*2);
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawDotCluster(ctx, cx, cy, radius, spacing, color, fadeOut){
+  const cols = Math.ceil((radius*2)/spacing);
+  for(let x=-cols;x<=cols;x++){
+    for(let y=-cols;y<=cols;y++){
+      const px = cx + x*spacing;
+      const py = cy + y*spacing;
+      const d = Math.hypot(px-cx, py-cy);
+      if(d > radius) continue;
+      const alpha = fadeOut ? Math.max(0, 1 - d/radius) : 1;
+      if(alpha < 0.05) continue;
+      ctx.fillStyle = color;
+      ctx.globalAlpha = alpha * 0.9;
+      const r = spacing*0.16 + rnd()*spacing*0.10;
+      ctx.beginPath();
+      ctx.arc(px, py, r, 0, Math.PI*2);
+      ctx.fill();
+    }
+  }
+  ctx.globalAlpha = 1;
+}
+
+// simple procedural thorn / barbed squiggle
+function drawThorns(ctx, x, y, scale, rot, color){
+  ctx.save();
+  ctx.translate(x,y);
+  ctx.rotate(rot);
+  ctx.scale(scale, scale);
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 3;
+  ctx.lineCap = 'round';
+  ctx.globalAlpha = 0.55;
+
+  let px=0, py=0;
+  ctx.beginPath();
+  ctx.moveTo(px,py);
+  const segments = 6 + Math.floor(rnd()*3);
+  let angle = rnd()*Math.PI*2;
+  for(let i=0;i<segments;i++){
+    angle += (rnd()-0.5)*1.4;
+    const len = 26 + rnd()*30;
+    const nx = px + Math.cos(angle)*len;
+    const ny = py + Math.sin(angle)*len;
+    ctx.quadraticCurveTo(px + Math.cos(angle+0.3)*len*0.5, py + Math.sin(angle+0.3)*len*0.5, nx, ny);
+    // spike off the segment
+    const spikeAngle = angle + (rnd()>0.5?1:-1)*1.1;
+    const spikeLen = 10 + rnd()*16;
+    ctx.moveTo(nx, ny);
+    ctx.lineTo(nx + Math.cos(spikeAngle)*spikeLen, ny + Math.sin(spikeAngle)*spikeLen);
+    ctx.moveTo(nx, ny);
+    px = nx; py = ny;
+  }
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+  ctx.restore();
+}
+
+function fitContain(imgW, imgH, boxW, boxH){
+  const scale = Math.min(boxW/imgW, boxH/imgH);
+  return { w: imgW*scale, h: imgH*scale };
+}
+function fitCover(imgW, imgH, boxW, boxH){
+  const scale = Math.max(boxW/imgW, boxH/imgH);
+  return { w: imgW*scale, h: imgH*scale };
+}
+
+const STORE_LABELS = { shein: 'SHEIN', shopee: 'Shopee', aliexpress: 'AliExpress' };
+const STORE_COLORS = { shein: '#111111', shopee: '#ee4d2d', aliexpress: '#ff4747' };
+
+// draws logo (if uploaded) + product id, anchored bottom-right
+function drawStoreBadge(ctx, W, H, store, productId, dark){
+  const marginX = W*0.06;
+  const marginY = H*0.955;
+  const idFontSize = Math.max(30, W*0.038);
+
+  ctx.save();
+  ctx.textAlign = 'right';
+  ctx.fillStyle = dark ? '#ffffff' : '#111111';
+  ctx.font = `700 ${idFontSize}px 'Archivo', sans-serif`;
+
+  ctx.fillText(productId, W - marginX, marginY);
+  const idWidth = ctx.measureText(productId).width;
+  const gap = idFontSize*0.35;
+
+  if(state.logoImg){
+    const logoH = idFontSize*1.6;
+    const {w:logoW, h:logoHFit} = fitContain(state.logoImg.width, state.logoImg.height, logoH*2.6, logoH);
+    ctx.drawImage(state.logoImg, W - marginX - idWidth - gap - logoW, marginY - logoHFit*0.78, logoW, logoHFit);
+  } else {
+    // fallback: colored pill with store name, same baseline, left of the id
+    const label = STORE_LABELS[store] || store;
+    ctx.font = `700 ${idFontSize*0.5}px 'Archivo', sans-serif`;
+    const pillPadX = 14, pillH = idFontSize*0.72;
+    const labelW = ctx.measureText(label).width;
+    const pillW = labelW + pillPadX*2;
+    const pillX = W - marginX - idWidth - gap - pillW;
+    const pillY = marginY - pillH*0.78;
+    ctx.fillStyle = STORE_COLORS[store] || '#333333';
+    roundRect(ctx, pillX, pillY, pillW, pillH, pillH/2);
+    ctx.fill();
+    ctx.fillStyle = '#ffffff';
+    ctx.textAlign = 'center';
+    ctx.fillText(label, pillX + pillW/2, pillY + pillH*0.68);
+  }
+  ctx.restore();
+}
+
+function roundRect(ctx, x, y, w, h, r){
+  ctx.beginPath();
+  ctx.moveTo(x+r, y);
+  ctx.arcTo(x+w, y, x+w, y+h, r);
+  ctx.arcTo(x+w, y+h, x, y+h, r);
+  ctx.arcTo(x, y+h, x, y, r);
+  ctx.arcTo(x, y, x+w, y, r);
+  ctx.closePath();
+}
+
+// ---------- main render ----------
+function render(){
+  const [W,H] = state.format.split('x').map(Number);
+  canvas.width = W; canvas.height = H;
+  rnd = mulberry32(state.seed);
+
+  const dark = state.theme === 'dark';
+  const bgColor = dark ? '#0a0a0c' : '#f3efe3';
+  const inkColor = dark ? '#ffffff' : '#111111';
+  const dotColor = dark ? '#ffffff' : '#111111';
+  const varianceAmt = state.variance/100;
+
+  // background
+  ctx.fillStyle = bgColor;
+  ctx.fillRect(0,0,W,H);
+
+  if(state.bgImg){
+    const {w,h} = fitCover(state.bgImg.width, state.bgImg.height, W, H);
+    ctx.save();
+    ctx.globalAlpha = state.bgOpacity/100;
+    ctx.drawImage(state.bgImg, (W-w)/2, (H-h)/2, w, h);
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = dark ? 'rgba(6,6,8,0.55)' : 'rgba(243,239,227,0.55)';
+    ctx.fillRect(0,0,W,H);
+    ctx.restore();
+  }
+
+  // corner dot bursts
+  const densityAmt = state.density/100; // 0..1
+  if(state.dots){
+    const corners = [
+      {x: W*(0.08+rnd()*0.06), y: H*(0.06+rnd()*0.05)},
+      {x: W*(0.90+rnd()*0.06), y: H*(0.05+rnd()*0.05)},
+      {x: W*(0.10+rnd()*0.08), y: H*(0.90+rnd()*0.06)},
+      {x: W*(0.88+rnd()*0.06), y: H*(0.90+rnd()*0.06)},
+    ];
+    const maxCorners = Math.max(1, Math.round(1 + densityAmt*3));
+    corners.slice(0, maxCorners).forEach((c,i)=>{
+      if(rnd() > 0.35 || i===0){
+        const radius = (W*0.14) * (0.55 + densityAmt*0.9 + varianceAmt*0.4 + rnd()*0.2);
+        drawDotCluster(ctx, c.x, c.y, radius, 9 + rnd()*4, dotColor, true);
+      }
+    });
+  }
+
+  // glow behind shirt area
+  const centerX = W/2;
+  const centerY = H*0.46;
+
+  if(state.glow){
+    const g = ctx.createRadialGradient(centerX, centerY, 10, centerX, centerY, W*0.42);
+    if(dark){
+      g.addColorStop(0, 'rgba(255,255,255,0.28)');
+      g.addColorStop(0.5, 'rgba(255,255,255,0.10)');
+      g.addColorStop(1, 'rgba(255,255,255,0)');
+    } else {
+      g.addColorStop(0, 'rgba(0,0,0,0.10)');
+      g.addColorStop(1, 'rgba(0,0,0,0)');
+    }
+    ctx.fillStyle = g;
+    ctx.fillRect(0,0,W,H);
+  }
+
+  // stars scattered
+  if(state.stars){
+    const count = Math.round(1 + densityAmt*22 + varianceAmt*4);
+    const spikeOptions = [4,4,4,5,6,6,8];
+    for(let i=0;i<count;i++){
+      const sx = rnd()*W;
+      const sy = rnd()*H;
+      // keep clear of dead center where shirt sits
+      const distCenter = Math.hypot(sx-centerX, sy-centerY);
+      if(distCenter < W*0.30 && rnd() > 0.15) continue;
+      const size = 6 + rnd()*22;
+      const alpha = 0.25 + rnd()*0.55;
+      const spikes = spikeOptions[Math.floor(rnd()*spikeOptions.length)];
+      drawStar(ctx, sx, sy, spikes, size, size*0.32, rnd()*Math.PI, inkColor, alpha);
+    }
+  }
+
+  // shiny bokeh dots
+  if(state.sparkles){
+    const glowColor = dark ? '#ffffff' : '#3a3a3a';
+    const count = Math.round(3 + densityAmt*16 + varianceAmt*3);
+    for(let i=0;i<count;i++){
+      const sx = rnd()*W;
+      const sy = rnd()*H;
+      const distCenter = Math.hypot(sx-centerX, sy-centerY);
+      if(distCenter < W*0.26 && rnd() > 0.2) continue;
+      const radius = 4 + rnd()*14;
+      const alpha = 0.35 + rnd()*0.5;
+      drawGlowDot(ctx, sx, sy, radius, glowColor, alpha);
+    }
+  }
+
+  // thorn ornaments
+  if(state.thorns){
+    const spots = [
+      {x: W*0.14, y: H*0.16, rot: rnd()*Math.PI},
+      {x: W*0.84, y: H*0.86, rot: rnd()*Math.PI},
+      {x: W*0.86, y: H*0.14, rot: rnd()*Math.PI},
+      {x: W*0.12, y: H*0.88, rot: rnd()*Math.PI},
+    ];
+    const maxThorns = Math.max(1, Math.round(1 + densityAmt*3));
+    spots.slice(0, maxThorns).forEach(s=>{
+      if(rnd() > 0.25) drawThorns(ctx, s.x, s.y, 0.9 + rnd()*0.7, s.rot, inkColor);
+    });
+  }
+
+  // ---- content ----
+  if(state.shirtImg){
+    const sizeFrac = state.shirtSize/100;
+    const boxW = W*sizeFrac, boxH = H*sizeFrac*0.82;
+    const {w,h} = fitContain(state.shirtImg.width, state.shirtImg.height, boxW, boxH);
+    ctx.drawImage(state.shirtImg, centerX - w/2, centerY - h/2, w, h);
+  } else {
+    ctx.fillStyle = inkColor;
+    ctx.globalAlpha = 0.25;
+    ctx.font = '600 28px Archivo, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('sobe o PNG da camiseta', centerX, centerY);
+    ctx.globalAlpha = 1;
+  }
+
+  // watermark bottom-left
+  ctx.textAlign = 'left';
+  ctx.fillStyle = inkColor;
+  ctx.font = "34px 'Permanent Marker', cursive";
+  ctx.fillText(state.watermark, W*0.06, H*0.955);
+
+  // product id badge, bottom-right
+  if(state.store !== 'none' && state.productId.trim() !== ''){
+    drawStoreBadge(ctx, W, H, state.store, state.productId.trim(), dark);
+  }
+}
+
+// ---------- wiring UI ----------
+document.getElementById('format').addEventListener('change', e=>{ state.format = e.target.value; render(); });
+
+document.querySelectorAll('#themeSeg button').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('#themeSeg button').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    state.theme = btn.dataset.theme;
+    render();
+  });
+});
+
+document.getElementById('upShirt').addEventListener('change', e=>{
+  const f = e.target.files[0];
+  if(!f) return;
+  loadImageFile(f, img=>{
+    state.shirtImg = img;
+    document.getElementById('upShirtBox').classList.add('has-file');
+    document.getElementById('upShirtLabel').textContent = '✓ ' + f.name;
+    render();
+  });
+});
+
+document.getElementById('upBg').addEventListener('change', e=>{
+  const f = e.target.files[0];
+  if(!f) return;
+  loadImageFile(f, img=>{
+    state.bgImg = toGrayscale(img);
+    document.getElementById('upBgBox').classList.add('has-file');
+    document.getElementById('upBgLabel').textContent = '✓ ' + f.name + ' (convertida p/ P&B)';
+    render();
+  });
+});
+
+document.getElementById('clearBg').addEventListener('click', ()=>{
+  state.bgImg = null;
+  document.getElementById('upBgBox').classList.remove('has-file');
+  document.getElementById('upBgLabel').textContent = 'Clique ou arraste uma foto de fundo (opcional)';
+  document.getElementById('upBg').value = '';
+  render();
+});
+
+document.getElementById('watermark').addEventListener('input', e=>{ state.watermark = e.target.value; render(); });
+
+document.getElementById('store').addEventListener('change', e=>{ state.store = e.target.value; render(); });
+document.getElementById('productId').addEventListener('input', e=>{ state.productId = e.target.value; render(); });
+
+document.getElementById('upLogo').addEventListener('change', e=>{
+  const f = e.target.files[0];
+  if(!f) return;
+  loadImageFile(f, img=>{
+    state.logoImg = img;
+    document.getElementById('upLogoBox').classList.add('has-file');
+    document.getElementById('upLogoLabel').textContent = '✓ ' + f.name;
+    render();
+  });
+});
+
+function wireToggle(id, key){
+  const el = document.getElementById(id);
+  el.addEventListener('click', ()=>{
+    el.classList.toggle('on');
+    state[key] = el.classList.contains('on');
+    render();
+  });
+}
+wireToggle('tgStars','stars');
+wireToggle('tgSparkles','sparkles');
+wireToggle('tgDots','dots');
+wireToggle('tgThorns','thorns');
+wireToggle('tgGlow','glow');
+
+const bgOpacityEl = document.getElementById('bgOpacity');
+const bgOpacityVal = document.getElementById('bgOpacityVal');
+bgOpacityEl.addEventListener('input', e=>{
+  state.bgOpacity = Number(e.target.value);
+  bgOpacityVal.textContent = state.bgOpacity + '%';
+  render();
+});
+bgOpacityVal.textContent = bgOpacityEl.value + '%';
+
+document.getElementById('variance').addEventListener('input', e=>{
+  state.variance = Number(e.target.value);
+  render();
+});
+
+const shirtSizeEl = document.getElementById('shirtSize');
+const shirtSizeVal = document.getElementById('shirtSizeVal');
+shirtSizeEl.addEventListener('input', e=>{
+  state.shirtSize = Number(e.target.value);
+  shirtSizeVal.textContent = state.shirtSize + '%';
+  render();
+});
+shirtSizeVal.textContent = shirtSizeEl.value + '%';
+
+const densityEl = document.getElementById('density');
+const densityVal = document.getElementById('densityVal');
+densityEl.addEventListener('input', e=>{
+  state.density = Number(e.target.value);
+  densityVal.textContent = state.density + '%';
+  render();
+});
+densityVal.textContent = densityEl.value + '%';
+
+document.getElementById('randomizeBtn').addEventListener('click', ()=>{
+  state.seed = Math.floor(Math.random()*100000);
+  render();
+});
+
+document.getElementById('downloadBtn').addEventListener('click', ()=>{
+  const link = document.createElement('a');
+  link.download = `seeker-post-${Date.now()}.png`;
+  link.href = canvas.toDataURL('image/png');
+  link.click();
+});
+
+// wait for fonts then draw
+document.fonts.ready.then(render);
+render();
+</script>
+</body>
+</html>
