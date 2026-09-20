@@ -3,8 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Seeker — Gerador de posts</title>
+<title>Seeker — Gerador de posts (lote)</title>
 <link href="https://fonts.googleapis.com/css2?family=Anton&family=Permanent+Marker&family=Archivo:wght@400;600;800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <style>
   :root{
     --bg: #0d0d0f;
@@ -31,6 +32,7 @@
   }
   @media (max-width: 900px){
     .wrap{grid-template-columns: 1fr; }
+    .panel{max-height:none;}
   }
   .panel{
     background:var(--panel);
@@ -104,12 +106,14 @@
     font-family:inherit;
   }
   .seg button.active{background:var(--accent); color:#111;}
+  .seg button:disabled{opacity:.4; cursor:not-allowed;}
   .toggle-row{
     display:flex;
     align-items:center;
     justify-content:space-between;
     padding:9px 0;
     font-size:13px;
+    gap:12px;
   }
   .switch{
     width:38px; height:22px;
@@ -143,6 +147,7 @@
     cursor:pointer;
     margin-top:6px;
   }
+  .btn:disabled{opacity:.45; cursor:not-allowed;}
   .btn-primary{background:var(--accent); color:#111;}
   .btn-ghost{background:var(--panel-2); color:var(--text); border:1px solid var(--line);}
   .stage{
@@ -163,6 +168,50 @@
   canvas{max-width:100%; height:auto; display:block;}
   .hint{color:var(--muted); font-size:12px; max-width:420px; text-align:center;}
   .small{font-size:11px; color:var(--muted); margin-top:-6px; margin-bottom:12px;}
+
+  /* status / progresso */
+  .bgstatus{font-size:12px; color:var(--muted); min-height:16px; margin:4px 0 6px;}
+  .bgstatus.err{color:#ff8a8a;}
+  .bgbar{height:4px; background:var(--panel-2); border-radius:4px; overflow:hidden; margin-bottom:10px;}
+  .bgbar[hidden]{display:none;}
+  .bgbar i{display:block; height:100%; width:0; background:var(--accent); transition:width .15s;}
+
+  /* fila de camisetas */
+  .queue{
+    max-height:230px;
+    overflow-y:auto;
+    border:1px solid var(--line);
+    border-radius:9px;
+    background:var(--panel-2);
+    margin-bottom:10px;
+  }
+  .queue:empty{display:none;}
+  .qrow{
+    display:flex;
+    align-items:center;
+    gap:9px;
+    padding:6px 8px;
+    border-bottom:1px solid var(--line);
+    cursor:pointer;
+    font-size:12px;
+  }
+  .qrow:last-child{border-bottom:none;}
+  .qrow:hover{background:rgba(255,255,255,.04);}
+  .qrow.active{background:rgba(232,199,255,.14);}
+  .qrow img{
+    width:34px; height:34px; object-fit:contain; border-radius:5px; flex-shrink:0;
+    background:repeating-conic-gradient(#2a2a30 0% 25%, #202025 0% 50%) 50%/10px 10px;
+  }
+  .qname{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .qchip{font-size:10.5px; color:var(--muted); flex-shrink:0;}
+  .qchip.done{color:#9be7a8;}
+  .qchip.error{color:#ff8a8a;}
+  .qchip.processing{color:var(--accent-2);}
+  .qx{
+    background:transparent; border:none; color:var(--muted); cursor:pointer;
+    font-size:16px; line-height:1; padding:2px 4px; flex-shrink:0;
+  }
+  .qx:hover{color:#ff8a8a;}
 </style>
 </head>
 <body>
@@ -170,7 +219,7 @@
 
   <div class="panel">
     <p class="brand">SEEKER<span>.</span> gerador</p>
-    <p class="sub">Monte o post trocando só a camiseta e o fundo. O resto (estrelas, pontilhado, brilho, marca d'água) é gerado automaticamente e varia a cada clique em "Randomizar".</p>
+    <p class="sub">Suba várias camisetas de uma vez: o fundo de cada uma é removido, o resto (estrelas, pontilhado, brilho, marca d'água) é gerado automaticamente e tudo sai num ZIP.</p>
 
     <h3 class="section">Formato</h3>
     <select id="format">
@@ -180,12 +229,24 @@
       <option value="1000x1500">Pinterest (2:3) — 1000×1500</option>
     </select>
 
-    <h3 class="section">Camiseta</h3>
+    <h3 class="section">Camisetas (lote)</h3>
     <div class="upload" id="upShirtBox">
-      <span id="upShirtLabel">Clique ou arraste o PNG da estampa/camiseta</span>
-      <input type="file" id="upShirt" accept="image/png,image/webp,image/jpeg">
+      <span id="upShirtLabel">Clique ou arraste uma ou várias fotos/PNGs das camisetas</span>
+      <input type="file" id="upShirt" accept="image/png,image/webp,image/jpeg" multiple>
     </div>
-    <div class="small">Fica melhor com fundo transparente (PNG).</div>
+    <div class="small">Pode ser foto normal (JPG) — o fundo é removido no próprio navegador. Clique numa linha pra ver o preview dela.</div>
+
+    <div class="queue" id="queueList"></div>
+
+    <div class="toggle-row"><span>Remover fundo automaticamente</span><div class="switch on" id="tgAutoBg"></div></div>
+    <div class="seg" id="shirtVerSeg">
+      <button data-ver="nobg" disabled>Sem fundo</button>
+      <button data-ver="orig" disabled>Original</button>
+    </div>
+    <button class="btn btn-ghost" id="removeAllBtn" style="margin-top:0;" disabled>✂ Remover fundo de todas</button>
+    <button class="btn btn-ghost" id="clearListBtn" disabled>🗑 Limpar lista</button>
+    <div class="bgstatus" id="bgStatus"></div>
+    <div class="bgbar" id="bgBar" hidden><i id="bgBarFill"></i></div>
 
     <h3 class="section">Fundo</h3>
     <div class="upload" id="upBgBox">
@@ -218,7 +279,9 @@
       <option value="shopee">Shopee</option>
       <option value="aliexpress">AliExpress</option>
     </select>
-    <label style="margin-top:10px;">ID do produto</label>
+    <div class="toggle-row" style="margin-top:6px;"><span>Usar nome do arquivo como ID do produto</span><div class="switch" id="tgIdFile"></div></div>
+    <div class="small" style="margin-top:-2px;">Ex.: o arquivo <b>32663N5.jpg</b> vira o ID <b>32663N5</b> naquela imagem. Desligado, todas usam o ID abaixo.</div>
+    <label>ID do produto (fixo)</label>
     <input type="text" id="productId" placeholder="ex: 32663N5 ou BCA-MHM-RHE">
 
     <label style="margin-top:10px;">Logo da loja (opcional, PNG)</label>
@@ -237,6 +300,7 @@
     <div class="toggle-row"><span>Pontilhado nos cantos</span><div class="switch on" id="tgDots"></div></div>
     <div class="toggle-row"><span>Ornamento de espinhos</span><div class="switch on" id="tgThorns"></div></div>
     <div class="toggle-row"><span>Brilho atrás da camiseta</span><div class="switch on" id="tgGlow"></div></div>
+    <div class="toggle-row"><span>Decoração diferente em cada imagem</span><div class="switch on" id="tgVary"></div></div>
 
     <label style="margin-top:14px;">Quantidade de elementos <span id="densityVal" style="color:var(--muted);"></span></label>
     <input type="range" id="density" min="0" max="100" value="50">
@@ -245,10 +309,11 @@
     <input type="range" id="variance" min="0" max="100" value="55">
 
     <button class="btn btn-primary" id="randomizeBtn">🎲 Randomizar decoração</button>
-    <button class="btn btn-primary" id="downloadBtn" style="margin-top:16px;">⬇ Baixar PNG</button>
+    <button class="btn btn-ghost" id="downloadBtn" style="margin-top:16px;">⬇ Baixar PNG (só a do preview)</button>
+    <button class="btn btn-primary" id="zipBtn" disabled>📦 Baixar todas (ZIP)</button>
 
     <h3 class="section">Postar</h3>
-    <div class="small" style="margin-top:-4px;">Baixa a imagem acima e depois abre o app pra subir manualmente.</div>
+    <div class="small" style="margin-top:-4px;">Baixa as imagens acima e depois abre o app pra subir manualmente.</div>
     <a class="btn btn-ghost" href="https://www.instagram.com/" target="_blank" rel="noopener" style="display:block; text-align:center; text-decoration:none; margin-top:10px;">📷 Abrir Instagram</a>
     <a class="btn btn-ghost" href="https://www.tiktok.com/upload" target="_blank" rel="noopener" style="display:block; text-align:center; text-decoration:none; margin-top:10px;">🎵 Abrir TikTok</a>
     <a class="btn btn-ghost" href="https://www.pinterest.com/pin-creation-tool/" target="_blank" rel="noopener" style="display:block; text-align:center; text-decoration:none; margin-top:10px;">📌 Abrir Pinterest</a>
@@ -258,19 +323,23 @@
     <div id="canvasHolder">
       <canvas id="c"></canvas>
     </div>
-    <p class="hint">Pré-visualização em tempo real. Suba a camiseta e (se quiser) um fundo — troque só isso entre posts. Clique em "Randomizar" para variar posição das estrelas, pontos e espinhos sem mexer no resto.</p>
+    <p class="hint">Pré-visualização em tempo real da camiseta selecionada na lista. Os ajustes valem pra todas as imagens do lote. "Randomizar" muda a decoração de todas de uma vez.</p>
   </div>
 
 </div>
 
 <script>
 const canvas = document.getElementById('c');
-const ctx = canvas.getContext('2d');
 
 let state = {
   format: '1080x1350',
   theme: 'dark',
-  shirtImg: null,
+  items: [],            // fila de camisetas
+  current: -1,          // índice do item no preview
+  autoRemove: true,
+  idFromFile: false,
+  varyEach: true,
+  exporting: false,
   bgImg: null,
   watermark: '@seeker_clothes',
   store: 'none',
@@ -309,6 +378,16 @@ function loadImageFile(file, cb){
   reader.readAsDataURL(file);
 }
 
+function urlToImage(url){
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = url;
+  });
+}
+function blobToImage(blob){ return urlToImage(URL.createObjectURL(blob)); }
+
 // converts an image to a true grayscale canvas (more reliable across browsers than ctx.filter)
 function toGrayscale(img){
   const off = document.createElement('canvas');
@@ -324,6 +403,261 @@ function toGrayscale(img){
   }
   octx.putImageData(data, 0, 0);
   return off;
+}
+
+// ---------- remoção de fundo ----------
+// Usa @imgly/background-removal: roda 100% no navegador (WASM + modelo ONNX), sem servidor e sem API key.
+// Pra trocar de biblioteca/API depois, mexa só em removeBgFromFile(): recebe um File e devolve um Blob PNG transparente.
+const BG_LIB_URL = 'https://cdn.jsdelivr.net/npm/@imgly/background-removal@1.6.0/+esm';
+let bgLibPromise = null;
+
+function getBgLib(){
+  if(!bgLibPromise){
+    bgLibPromise = import(BG_LIB_URL).catch(err => { bgLibPromise = null; throw err; });
+  }
+  return bgLibPromise;
+}
+
+async function removeBgFromFile(file, onProgress){
+  const { removeBackground } = await getBgLib();
+  return removeBackground(file, {
+    model: 'isnet_fp16',              // 'isnet' = mais preciso e mais pesado | 'isnet_quint8' = mais leve
+    output: { format: 'image/png' },
+    progress: onProgress
+  });
+}
+
+// corta as bordas transparentes pra o slider "Tamanho" funcionar sobre a camiseta em si
+function cropToContent(img){
+  const w = img.width, h = img.height;
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const cx = c.getContext('2d');
+  cx.drawImage(img, 0, 0);
+  const px = cx.getImageData(0, 0, w, h).data;
+  let minX = w, minY = h, maxX = -1, maxY = -1;
+  for(let y=0; y<h; y++){
+    for(let x=0; x<w; x++){
+      if(px[(y*w + x)*4 + 3] > 10){
+        if(x < minX) minX = x;
+        if(x > maxX) maxX = x;
+        if(y < minY) minY = y;
+        if(y > maxY) maxY = y;
+      }
+    }
+  }
+  if(maxX < 0) return img;
+  const cw = maxX - minX + 1, ch = maxY - minY + 1;
+  const out = document.createElement('canvas');
+  out.width = cw; out.height = ch;
+  out.getContext('2d').drawImage(c, minX, minY, cw, ch, 0, 0, cw, ch);
+  return out;
+}
+
+// ---------- lote: itens, fila e status ----------
+let uidCounter = 0;
+let queuePromise = null;
+
+const bgStatusEl = document.getElementById('bgStatus');
+const bgBarEl = document.getElementById('bgBar');
+const bgBarFill = document.getElementById('bgBarFill');
+const removeAllBtn = document.getElementById('removeAllBtn');
+const clearListBtn = document.getElementById('clearListBtn');
+const zipBtn = document.getElementById('zipBtn');
+const queueListEl = document.getElementById('queueList');
+const verBtns = document.querySelectorAll('#shirtVerSeg button');
+
+function currentItem(){ return state.items[state.current] || null; }
+function itemImage(it){ return it ? ((it.useNoBg && it.noBg) ? it.noBg : it.orig) : null; }
+function itemProductId(it){
+  if(state.idFromFile && it) return it.name;
+  return state.productId.trim();
+}
+function itemSeed(idx){ return state.varyEach ? (state.seed + idx*7919) : state.seed; }
+
+function setBgStatus(msg, isErr){
+  bgStatusEl.textContent = msg || '';
+  bgStatusEl.classList.toggle('err', !!isErr);
+}
+function setBgProgress(p){
+  if(p == null){ bgBarEl.hidden = true; return; }
+  bgBarEl.hidden = false;
+  bgBarFill.style.width = Math.round(Math.min(1, Math.max(0, p))*100) + '%';
+}
+
+function updateBatchStatus(){
+  if(state.exporting) return;
+  const its = state.items;
+  const fin = its.filter(i => i.status === 'done' || i.status === 'error').length;
+  const err = its.filter(i => i.status === 'error').length;
+  const pend = its.filter(i => i.status === 'pending' || i.status === 'processing').length;
+  if(pend){
+    setBgStatus('Removendo fundo… ' + (fin + 1) + '/' + (fin + pend));
+    setBgProgress(fin / (fin + pend));
+  } else if(fin){
+    setBgStatus('✓ ' + (fin - err) + ' com fundo removido' + (err ? ' · ' + err + ' com erro (vai a original)' : ''));
+    setBgProgress(null);
+  } else {
+    setBgStatus('');
+    setBgProgress(null);
+  }
+}
+
+function refreshControls(){
+  const n = state.items.length;
+  const busy = !!queuePromise || state.exporting;
+  const cur = currentItem();
+  removeAllBtn.disabled = !n || busy;
+  clearListBtn.disabled = !n || state.exporting;
+  zipBtn.disabled = !n || state.exporting;
+  zipBtn.textContent = n ? '📦 Baixar todas (ZIP) — ' + n : '📦 Baixar todas (ZIP)';
+  document.getElementById('downloadBtn').disabled = !n;
+  verBtns.forEach(b => {
+    b.disabled = !cur || !cur.noBg;
+    b.classList.toggle('active', !!cur && !!cur.noBg && b.dataset.ver === (cur.useNoBg ? 'nobg' : 'orig'));
+  });
+}
+
+const STATUS_LABEL = {
+  pending: 'na fila',
+  processing: 'processando…',
+  done: '✓ sem fundo',
+  error: '⚠ erro',
+  manual: 'original'
+};
+
+function renderQueue(){
+  queueListEl.innerHTML = '';
+  state.items.forEach((it, idx) => {
+    const row = document.createElement('div');
+    row.className = 'qrow' + (idx === state.current ? ' active' : '');
+
+    const im = document.createElement('img');
+    im.src = it.url;
+    row.appendChild(im);
+
+    const nm = document.createElement('span');
+    nm.className = 'qname';
+    nm.textContent = it.name;
+    nm.title = it.file.name;
+    row.appendChild(nm);
+
+    const chip = document.createElement('span');
+    chip.className = 'qchip ' + it.status;
+    chip.textContent = STATUS_LABEL[it.status] || '';
+    row.appendChild(chip);
+
+    const x = document.createElement('button');
+    x.className = 'qx';
+    x.textContent = '×';
+    x.title = 'Tirar da lista';
+    x.addEventListener('click', ev => { ev.stopPropagation(); removeItem(it.id); });
+    row.appendChild(x);
+
+    row.addEventListener('click', () => {
+      state.current = idx;
+      renderQueue();
+      render();
+    });
+    queueListEl.appendChild(row);
+  });
+
+  const n = state.items.length;
+  document.getElementById('upShirtBox').classList.toggle('has-file', n > 0);
+  document.getElementById('upShirtLabel').textContent = n
+    ? '✓ ' + n + (n === 1 ? ' camiseta na lista' : ' camisetas na lista') + ' — clique pra adicionar mais'
+    : 'Clique ou arraste uma ou várias fotos/PNGs das camisetas';
+  refreshControls();
+}
+
+function removeItem(id){
+  const idx = state.items.findIndex(i => i.id === id);
+  if(idx < 0) return;
+  const [it] = state.items.splice(idx, 1);
+  URL.revokeObjectURL(it.url);
+  if(state.current >= state.items.length) state.current = state.items.length - 1;
+  else if(idx < state.current) state.current--;
+  renderQueue();
+  render();
+  updateBatchStatus();
+}
+
+function clearList(){
+  state.items.forEach(it => URL.revokeObjectURL(it.url));
+  state.items = [];
+  state.current = -1;
+  renderQueue();
+  render();
+  updateBatchStatus();
+}
+
+async function addFiles(fileList){
+  const files = [...fileList].filter(f => f.type.startsWith('image/'));
+  if(!files.length) return;
+  for(const f of files){
+    const url = URL.createObjectURL(f);
+    try{
+      const orig = await urlToImage(url);
+      state.items.push({
+        id: ++uidCounter,
+        file: f,
+        name: f.name.replace(/\.[^.]+$/, ''),
+        url,
+        orig,
+        noBg: null,
+        useNoBg: true,
+        status: state.autoRemove ? 'pending' : 'manual'
+      });
+    }catch(err){
+      console.error('Imagem inválida:', f.name, err);
+      URL.revokeObjectURL(url);
+    }
+  }
+  if(state.current < 0 && state.items.length) state.current = 0;
+  renderQueue();
+  render();
+  updateBatchStatus();
+  if(state.autoRemove) runQueue();
+}
+
+// processa os itens "pending" um por vez (o modelo já fica em memória depois do 1º)
+function runQueue(){
+  if(!queuePromise){
+    queuePromise = (async () => {
+      refreshControls();
+      try{
+        let it;
+        while((it = state.items.find(i => i.status === 'pending'))){
+          it.status = 'processing';
+          renderQueue();
+          updateBatchStatus();
+          try{
+            const blob = await removeBgFromFile(it.file, (key, cur, total) => {
+              if(String(key).startsWith('fetch')){
+                const p = total ? cur/total : 0;
+                setBgStatus('Baixando modelo… ' + Math.round(p*100) + '% (só na 1ª vez)');
+                setBgProgress(p);
+              }
+            });
+            const img = await blobToImage(blob);
+            it.noBg = cropToContent(img);
+            it.useNoBg = true;
+            it.status = 'done';
+          }catch(err){
+            console.error('Erro ao remover fundo de', it.file.name, err);
+            it.status = 'error';
+          }
+          renderQueue();
+          if(currentItem() === it) render();
+        }
+      } finally {
+        queuePromise = null;
+        refreshControls();
+        updateBatchStatus();
+      }
+    })();
+  }
+  return queuePromise;
 }
 
 // ---------- drawing helpers ----------
@@ -481,11 +815,13 @@ function roundRect(ctx, x, y, w, h, r){
   ctx.closePath();
 }
 
-// ---------- main render ----------
-function render(){
+// ---------- render de um post (serve pro preview e pro lote) ----------
+// o = { shirtImg, seed, productId }
+function drawPost(cv, o){
+  const ctx = cv.getContext('2d');
   const [W,H] = state.format.split('x').map(Number);
-  canvas.width = W; canvas.height = H;
-  rnd = mulberry32(state.seed);
+  cv.width = W; cv.height = H;
+  rnd = mulberry32(o.seed);
 
   const dark = state.theme === 'dark';
   const bgColor = dark ? '#0a0a0c' : '#f3efe3';
@@ -591,17 +927,17 @@ function render(){
   }
 
   // ---- content ----
-  if(state.shirtImg){
+  if(o.shirtImg){
     const sizeFrac = state.shirtSize/100;
     const boxW = W*sizeFrac, boxH = H*sizeFrac*0.82;
-    const {w,h} = fitContain(state.shirtImg.width, state.shirtImg.height, boxW, boxH);
-    ctx.drawImage(state.shirtImg, centerX - w/2, centerY - h/2, w, h);
+    const {w,h} = fitContain(o.shirtImg.width, o.shirtImg.height, boxW, boxH);
+    ctx.drawImage(o.shirtImg, centerX - w/2, centerY - h/2, w, h);
   } else {
     ctx.fillStyle = inkColor;
     ctx.globalAlpha = 0.25;
     ctx.font = '600 28px Archivo, sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('sobe o PNG da camiseta', centerX, centerY);
+    ctx.fillText('sobe as camisetas (PNG/JPG)', centerX, centerY);
     ctx.globalAlpha = 1;
   }
 
@@ -612,8 +948,90 @@ function render(){
   ctx.fillText(state.watermark, W*0.06, H*0.955);
 
   // product id badge, bottom-right
-  if(state.store !== 'none' && state.productId.trim() !== ''){
-    drawStoreBadge(ctx, W, H, state.store, state.productId.trim(), dark);
+  if(state.store !== 'none' && o.productId){
+    drawStoreBadge(ctx, W, H, state.store, o.productId, dark);
+  }
+}
+
+function render(){
+  const it = currentItem();
+  drawPost(canvas, {
+    shirtImg: itemImage(it),
+    seed: itemSeed(Math.max(0, state.current)),
+    productId: itemProductId(it)
+  });
+}
+
+// ---------- exportar em lote (ZIP) ----------
+function safeName(s){
+  return String(s).normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/^-+|-+$/g, '') || 'post';
+}
+
+function downloadBlob(blob, filename){
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
+}
+
+async function exportZip(){
+  if(!state.items.length || state.exporting) return;
+  if(typeof JSZip === 'undefined'){
+    setBgStatus('Não carregou o JSZip (confere a internet e recarrega a página).', true);
+    return;
+  }
+  state.exporting = true;
+  refreshControls();
+  try{
+    // garante que todo mundo já passou pela remoção de fundo (se o automático estiver ligado)
+    if(state.autoRemove){
+      state.items.forEach(i => { if(i.status === 'manual') i.status = 'pending'; });
+      renderQueue();
+      state.exporting = false;      // deixa o status da fila aparecer
+      await runQueue();
+      state.exporting = true;
+      refreshControls();
+    }
+
+    const n = state.items.length;
+    const zip = new JSZip();
+    const used = new Set();
+    const off = document.createElement('canvas');
+
+    for(let i=0; i<n; i++){
+      const it = state.items[i];
+      setBgStatus('Gerando imagem ' + (i+1) + '/' + n + '…');
+      setBgProgress(i / n);
+      drawPost(off, { shirtImg: itemImage(it), seed: itemSeed(i), productId: itemProductId(it) });
+      const blob = await new Promise(res => off.toBlob(res, 'image/png'));
+      let base = 'seeker-' + safeName(it.name);
+      let finalName = base, k = 2;
+      while(used.has(finalName)){ finalName = base + '-' + k++; }
+      used.add(finalName);
+      zip.file(finalName + '.png', blob);
+      await new Promise(r => setTimeout(r)); // respira pra UI não travar
+    }
+
+    setBgStatus('Compactando ZIP…');
+    const zblob = await zip.generateAsync({ type: 'blob', compression: 'STORE' }, meta => setBgProgress(meta.percent/100));
+    downloadBlob(zblob, 'seeker-posts-' + Date.now() + '.zip');
+    state.exporting = false;
+    setBgProgress(null);
+    setBgStatus('✓ ZIP com ' + n + ' imagens gerado');
+  }catch(err){
+    console.error('Erro ao gerar ZIP:', err);
+    state.exporting = false;
+    setBgProgress(null);
+    setBgStatus('Deu erro ao gerar o ZIP (detalhes no console).', true);
+  }finally{
+    state.exporting = false;
+    refreshControls();
+    render(); // volta o canvas do preview ao estado normal
   }
 }
 
@@ -630,12 +1048,35 @@ document.querySelectorAll('#themeSeg button').forEach(btn=>{
 });
 
 document.getElementById('upShirt').addEventListener('change', e=>{
-  const f = e.target.files[0];
-  if(!f) return;
-  loadImageFile(f, img=>{
-    state.shirtImg = img;
-    document.getElementById('upShirtBox').classList.add('has-file');
-    document.getElementById('upShirtLabel').textContent = '✓ ' + f.name;
+  const files = e.target.files;
+  if(!files || !files.length) return;
+  addFiles(files).then(() => { e.target.value = ''; });
+});
+
+// remoção de fundo: toggle automático, botão "todas" e alternar original/sem fundo (item do preview)
+document.getElementById('tgAutoBg').addEventListener('click', e=>{
+  e.currentTarget.classList.toggle('on');
+  state.autoRemove = e.currentTarget.classList.contains('on');
+  if(state.autoRemove){
+    state.items.forEach(i => { if(i.status === 'manual') i.status = 'pending'; });
+    renderQueue();
+    if(state.items.some(i => i.status === 'pending')) runQueue();
+  }
+});
+removeAllBtn.addEventListener('click', ()=>{
+  // refaz tudo que ainda não tem fundo removido (inclui os que deram erro)
+  state.items.forEach(i => { if(i.status !== 'done') i.status = 'pending'; });
+  renderQueue();
+  updateBatchStatus();
+  runQueue();
+});
+clearListBtn.addEventListener('click', clearList);
+verBtns.forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    const it = currentItem();
+    if(!it || !it.noBg) return;
+    it.useNoBg = btn.dataset.ver === 'nobg';
+    refreshControls();
     render();
   });
 });
@@ -688,6 +1129,8 @@ wireToggle('tgSparkles','sparkles');
 wireToggle('tgDots','dots');
 wireToggle('tgThorns','thorns');
 wireToggle('tgGlow','glow');
+wireToggle('tgVary','varyEach');
+wireToggle('tgIdFile','idFromFile');
 
 const bgOpacityEl = document.getElementById('bgOpacity');
 const bgOpacityVal = document.getElementById('bgOpacityVal');
@@ -727,13 +1170,15 @@ document.getElementById('randomizeBtn').addEventListener('click', ()=>{
 });
 
 document.getElementById('downloadBtn').addEventListener('click', ()=>{
-  const link = document.createElement('a');
-  link.download = `seeker-post-${Date.now()}.png`;
-  link.href = canvas.toDataURL('image/png');
-  link.click();
+  const it = currentItem();
+  const name = it ? 'seeker-' + safeName(it.name) : 'seeker-post';
+  canvas.toBlob(blob => downloadBlob(blob, name + '.png'), 'image/png');
 });
 
+zipBtn.addEventListener('click', exportZip);
+
 // wait for fonts then draw
+renderQueue();
 document.fonts.ready.then(render);
 render();
 </script>
